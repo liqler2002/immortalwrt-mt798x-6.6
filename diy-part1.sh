@@ -6,8 +6,8 @@ set -e
 echo "==> [diy-part1] 添加第三方包源"
 
 # 1) PassWall + 依赖（padavanonly/immortalwrt-mt798x-6.6 默认不含，必须加）
-git clone https://github.com/xiaorouji/openwrt-passwall-packages.git package/passwall_packages
-git clone https://github.com/xiaorouji/openwrt-passwall.git package/passwall
+git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git package/passwall_packages
+git clone https://github.com/Openwrt-Passwall/openwrt-passwall.git package/passwall
 
 # 2) Argon 主题：
 #    padavanonly fork 一般已自带 luci-theme-argon / luci-app-argon-config，无需重复克隆。

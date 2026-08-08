@@ -1,0 +1,141 @@
+name: Build Tenda BE12 Pro (BE7200 Ultra) OpenWrt
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-tenda-be12pro.yml'
+      - 'tenda-be12pro.config'
+      - 'diy-part1.sh'
+      - 'diy-part2.sh'
+  schedule:
+    - cron: '0 18 * * 0'   # 每周日 18:00 UTC 自动追新（不需要就删掉这行）
+
+env:
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
+  REPO_BRANCH: openwrt-24.10-6.6
+  CONFIG_FILE: tenda-be12pro.config
+  UPLOAD_RELEASE: true
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Init build environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install -y $(curl -fsSL https://is.gd/depend_ubuntu2204_openwrt)
+          sudo -E apt-get -qq autoremove --purge
+          sudo -E apt-get -qq clean
+          sudo timedatectl set-timezone "$TZ"
+
+      - name: Clone source
+        working-directory: /workdir
+        run: |
+          df -hT $PWD
+          git clone $REPO_URL -b $REPO_BRANCH openwrt
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: Load .config
+        run: |
+          [ -e "$CONFIG_FILE" ] && mv "$CONFIG_FILE" openwrt/.config
+
+      - name: Run diy-part1.sh (add custom sources)
+        run: |
+          cd openwrt
+          bash "$GITHUB_WORKSPACE/diy-part1.sh"
+
+      - name: Update & install feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Run diy-part2.sh (default settings)
+        run: |
+          cd openwrt
+          bash "$GITHUB_WORKSPACE/diy-part2.sh"
+
+      - name: Defconfig & verify packages
+        run: |
+          cd openwrt
+          make defconfig
+          echo "===== 校验：目标设备是否被识别 ====="
+          if grep -q "^CONFIG_TARGET_mediatek_filogic_DEVICE_tenda_be12-pro=y" .config; then
+            echo "OK   DEVICE tenda_be12-pro"
+          else
+            echo "MISS DEVICE tenda_be12-pro  <-- 该分支可能未含此设备，请改用 kalicyh/tenda_be12-pro-ImmortalWrt 或核对分支"
+          fi
+          echo "===== 校验：被静默丢弃的包 ====="
+          # turboacc 在 padavanonly fork 叫 -mtk，旧/通用 fork 叫 luci-app-turboacc，两者其一即可
+          turboacc_ok=false
+          for t in luci-app-turboacc-mtk luci-app-turboacc; do
+            if grep -q "^CONFIG_PACKAGE_${t}=y" .config; then
+              echo "OK   $t"
+              turboacc_ok=true
+            fi
+          done
+          [ "$turboacc_ok" = false ] && echo "MISS luci-app-turboacc / -mtk  <-- 该包不在 feeds，请加源或删除对应行"
+          for p in luci-app-passwall luci-app-adguardhome luci-app-tailscale luci-app-wireguard luci-app-ddns ddns-scripts-cloudflare luci-theme-argon luci-app-wol luci-app-ttyd openssh-sftp-server luci-proto-wireguard luci-proto-ppp ca-certificates; do
+            if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
+              echo "OK   $p"
+            else
+              echo "MISS $p  <-- 该包不在 feeds，请加源或删除对应行"
+            fi
+          done
+
+      - name: Download
+        run: |
+          cd openwrt
+          make download -j$(nproc)
+
+      - name: Compile
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Check image size
+        run: |
+          cd openwrt/bin/targets/*/*
+          echo "===== 产物大小 ====="
+          ls -lh *tenda_be12-pro* || true
+          echo "本机 ubi/rootfs 分区上限 ≈ 90MB（flash layout 0xd80000-0x6780000）。若产物逼近/超过或报 'Image too big'："
+          echo "降体积优先级：① 砍 Tailscale（已保留 WireGuard，可替代异地组网）"
+          echo "            ② 砍 AdGuard Home（改由群晖 DS220+ 的 Docker 承载，路由 DNS 指过去）"
+          echo "            ③ 砍 PassWall（仅留基础 LuCI）"
+
+      - name: Organize
+        id: organize
+        run: |
+          cd openwrt/bin/targets/*/*
+          echo "FIRMWARE_PATH=$PWD" >> "$GITHUB_ENV"
+          echo "DATE=$(date +%Y%m%d)" >> "$GITHUB_ENV"
+
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        if: env.UPLOAD_RELEASE == 'true'
+        with:
+          tag_name: tenda-be12pro-${{ env.DATE }}
+          name: Tenda BE12 Pro ${{ env.DATE }}
+          files: ${{ env.FIRMWARE_PATH }}/*tenda_be12-pro*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

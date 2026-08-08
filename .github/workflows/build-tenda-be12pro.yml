@@ -48,12 +48,10 @@ jobs:
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
 
-      - name: Clone source
-        working-directory: /workdir
+     - name: Clone source
         run: |
-          df -hT $PWD
-          git clone $REPO_URL -b $REPO_BRANCH openwrt
-          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+          df -hT "$GITHUB_WORKSPACE"
+          git clone "$REPO_URL" -b "$REPO_BRANCH" openwrt
 
       - name: Load .config
         run: |

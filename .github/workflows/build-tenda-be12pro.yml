@@ -121,7 +121,7 @@ jobs:
           echo "            ② 砍 AdGuard Home（改由群晖 DS220+ 的 Docker 承载，路由 DNS 指过去）"
           echo "            ③ 砍 PassWall（仅留基础 LuCI）"
 
-     - name: Organize files
+      - name: Organize files
       id: organize
       run: |
         cd openwrt/bin/targets/*/*
@@ -129,7 +129,7 @@ jobs:
         echo "FIRMWARE_PATH=$PWD" >> "$GITHUB_ENV"
         echo "DATE=$(date +%Y%m%d)" >> "$GITHUB_ENV"
 
-    - name: Upload release
+      - name: Upload release
       uses: softprops/action-gh-release@v2
       if: env.UPLOAD_RELEASE == 'true'
       with:

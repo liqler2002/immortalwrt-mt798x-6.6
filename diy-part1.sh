@@ -9,6 +9,8 @@ echo "==> [diy-part1] 添加第三方包源"
 git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git package/passwall_packages
 # 删除 PassWall 第三方包集里追新的 xray-core，强制使用 ImmortalWrt 官方兼容版 xray-core
 rm -rf package/passwall_packages/xray-core
+rm -rf package/passwall_packages/geoview
+rm -rf package/passwall_packages/v2ray-plugin
 git clone https://github.com/Openwrt-Passwall/openwrt-passwall.git package/passwall
 
 # 2) Argon 主题：

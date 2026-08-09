@@ -134,6 +134,6 @@ jobs:
         with:
           tag_name: tenda-be12pro-${{ env.DATE }}
           name: Tenda BE12 Pro ${{ env.DATE }}
-         files: ${{ env.FIRMWARE_PATH }}/*
+      files: "${{ env.FIRMWARE_PATH }}/*"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

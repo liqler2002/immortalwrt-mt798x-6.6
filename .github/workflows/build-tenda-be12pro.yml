@@ -122,19 +122,19 @@ jobs:
           echo "            ③ 砍 PassWall（仅留基础 LuCI）"
 
       - name: Organize files
-      id: organize
-      run: |
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        echo "FIRMWARE_PATH=$PWD" >> "$GITHUB_ENV"
-        echo "DATE=$(date +%Y%m%d)" >> "$GITHUB_ENV"
+        id: organize
+        run: |
+          cd openwrt/bin/targets/*/*
+          rm -rf packages
+          echo "FIRMWARE_PATH=$PWD" >> "$GITHUB_ENV"
+          echo "DATE=$(date +%Y%m%d-%H%M)" >> "$GITHUB_ENV"
 
-        - name: Upload release
-      uses: softprops/action-gh-release@v2
-      if: env.UPLOAD_RELEASE == 'true'
-      with:
-        tag_name: tenda-be12pro-${{ env.DATE }}
-        name: Tenda BE12 Pro ${{ env.DATE }}
-        files: "${{ env.FIRMWARE_PATH }}/*"
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        if: env.UPLOAD_RELEASE == 'true'
+        with:
+          tag_name: tenda-be12pro-${{ env.DATE }}
+          name: Tenda BE12 Pro ${{ env.DATE }}
+          files: "${{ env.FIRMWARE_PATH }}/*"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

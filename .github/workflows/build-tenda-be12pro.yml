@@ -122,25 +122,46 @@ jobs:
           echo "===== 校验：被静默丢弃的包（post-defconfig 权威）====="
           # 注：luci-app-tailscale / luci-app-adguardhome / luci-app-wireguard 均为 24.10 默认源不含的包——
           #   tailscale/adguardhome 后端二进制已直接 =y 编入；wireguard UI 由 luci-proto-wireguard 提供
-          fam_missing=0
+          ok_list="" ; warn_list="" ; miss_list=""
           for p in luci-app-passwall xray-core adguardhome tailscale wireguard-tools luci-proto-wireguard luci-proto-ppp luci-app-ddns ddns-scripts-cloudflare luci-app-upnp luci-app-wol luci-app-ttyd openssh-sftp-server luci-theme-argon ca-certificates kmod-mediatek_hnat cron; do
             if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
               echo "OK   $p"
+              ok_list="$ok_list $p"
             else
               # 子包/变体：在 OpenWrt 里大多通过 DEPENDS 自动带父包，defconfig 找不着单独的名字时不算缺包
               case "$p" in
                 ddns-scripts-cloudflare|openssh-sftp-server)
-                  echo "WARN $p  (子包，defconfig 未单独列出但会由父包 ddns-scripts/openssh 一起编入 — 非缺包)" ;;
+                  echo "WARN $p  (子包，defconfig 未单独列出但会由父包 ddns-scripts/openssh 一起编入 — 非缺包)"
+                  warn_list="$warn_list $p" ;;
                 kmod-mediatek_hnat)
-                  echo "WARN $p  (OpenWrt 核心内核模块，不在 feeds 中；由 OpenWrt 主树直接提供)" ;;
+                  echo "WARN $p  (OpenWrt 核心内核模块，不在 feeds 中；由 OpenWrt 主树直接提供)"
+                  warn_list="$warn_list $p" ;;
                 *)
-                  echo "MISS $p  <-- make defconfig 后该包被丢弃（feeds 中无此包或依赖缺失）"
-                  fam_missing=1 ;;
+                  # 关键诊断：MISS 时直接在 feeds 索引里搜这个包，看它在不在 / 哪个 feed 下
+                  feed_match="$(./scripts/feeds list 2>/dev/null | grep -E "^${p}\b" | head -1)"
+                  if [ -n "$feed_match" ]; then
+                    echo "MISS $p  <-- 在 feeds 索引中有 = '${feed_match}'，但 defconfig 仍然丢弃。意味着：依赖链上某个包被 defconfig 解析失败"
+                  else
+                    echo "MISS $p  <-- feeds 索引里完全没有（feed 未拉取或包不存在于任何已配置的 feed）。请检查 feeds.conf.default 是否含此 feed"
+                  fi
+                  miss_list="$miss_list $p" ;;
               esac
             fi
           done
-          if [ "$fam_missing" -ne 0 ]; then
-            echo "❌ 全家桶校验未通过，已终止构建。请检查下方 MISS 的包是否需要：① 加 feeds 源 ② 改名 ③ 启用父包（子包情况）"
+          # 汇总：失败时一眼看出全部 MISS，无需上下滚动找
+          echo ""
+          echo "===== 汇总 ====="
+          echo "OK   ($(echo $ok_list  | wc -w)):$ok_list"
+          echo "WARN ($(echo $warn_list | wc -w)):$warn_list"
+          echo "MISS ($(echo $miss_list | wc -w)):$miss_list"
+          if [ -n "$miss_list" ]; then
+            echo ""
+            echo "❌ 以下包被 make defconfig 丢弃，构建已终止：$miss_list"
+            echo "诊断指引："
+            echo "  - 若 MISS 行的"在 feeds 索引中有"分支：包其实在 feeds 里，但 defconfig 因其依赖链上某包解析失败而丢。补全缺失的依赖，或显式 .config 加上。"
+            echo "  - 若 MISS 行的"feeds 索引里完全没有"分支：该包不在当前任何 feed 索引中，需："
+            echo "    ① 把含此包的额外 feed 加进 feeds.conf.default（参考 diy-part1.sh 的 passwall / passwall_packages）"
+            echo "    ② 或显式 .config 改用既有包替代"
             exit 1
           fi
           echo "✅ 全家桶校验通过（含子包），继续编译"

@@ -86,17 +86,34 @@ jobs:
       - name: Update & install feeds
         run: |
           cd openwrt
-          ./scripts/feeds update -a
+          # GitHub Actions 克隆 luci/packages 大仓库易网络抖动，重试 3 次
+          for i in 1 2 3; do
+            if ./scripts/feeds update -a; then
+              echo "feeds update 成功（第 $i 次）"
+              break
+            fi
+            echo "feeds update 失败，第 $i 次重试..."
+            sleep 8
+          done
           ./scripts/feeds install -a
-          echo "===== 强制确认全家桶已安装（feeds 缺失即中断，避免静默丢包）====="
+          echo "===== 权威校验：全家桶是否真进入 feeds 安装树（直接看 package/feeds/*/<包名> 目录是否生成）====="
+          echo "已安装包总数: $(find package/feeds -name Makefile 2>/dev/null | wc -l)"
+          miss=0
           for p in luci-app-passwall xray-core adguardhome tailscale wireguard-tools luci-proto-wireguard luci-proto-ppp luci-app-ddns ddns-scripts-cloudflare luci-app-upnp luci-app-wol luci-app-ttyd openssh-sftp-server luci-theme-argon ca-certificates kmod-mediatek_hnat cron; do
-            if ./scripts/feeds install "$p" >/dev/null 2>&1; then
-              echo "OK   install $p"
+            if ls -d package/feeds/*/"$p" >/dev/null 2>&1; then
+              echo "OK   $p"
             else
-              echo "FAIL install $p  <-- feeds 中找不到该包，构建前中断！请检查 feeds.conf.default / 目标分支"
-              exit 1
+              echo "MISS $p  <-- 未进入 feeds 安装树（update/install 失败或该源无此包）"
+              miss=1
             fi
           done
+          if [ "$miss" -ne 0 ]; then
+            echo "❌ 全家桶未全部进入 feeds 安装树，终止构建。请检查上方 'feeds update' 是否拉取完整（GitHub Actions 克隆大仓库网络抖动常见）。"
+            echo "   若已安装包总数明显偏少（如 < 3000），即为 feeds 未拉全，重跑通常即可；"
+            echo "   若总数正常但仍 MISS，说明该包在 immortalwrt 源里被移除/改名，需补 feed 或换包。"
+            exit 1
+          fi
+          echo "✅ 全家桶已全部进入 feeds 安装树"
 
       - name: Run diy-part2.sh (default settings)
         run: |

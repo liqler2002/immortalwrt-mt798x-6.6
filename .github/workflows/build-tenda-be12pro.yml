@@ -88,6 +88,15 @@ jobs:
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+          echo "===== 强制确认全家桶已安装（feeds 缺失即中断，避免静默丢包）====="
+          for p in luci-app-passwall xray-core adguardhome tailscale wireguard-tools luci-proto-wireguard luci-proto-ppp luci-app-ddns ddns-scripts-cloudflare luci-app-upnp luci-app-wol luci-app-ttyd openssh-sftp-server luci-theme-argon ca-certificates kmod-mediatek_hnat cron; do
+            if ./scripts/feeds install "$p" >/dev/null 2>&1; then
+              echo "OK   install $p"
+            else
+              echo "FAIL install $p  <-- feeds 中找不到该包，构建前中断！请检查 feeds.conf.default / 目标分支"
+              exit 1
+            fi
+          done
 
       - name: Run diy-part2.sh (default settings)
         run: |
@@ -116,13 +125,20 @@ jobs:
           [ "$turboacc_ok" = false ] && echo "MISS luci-app-turboacc / -mtk  <-- 该包不在 feeds，请加源或删除对应行"
           echo "（注：luci-app-tailscale / luci-app-adguardhome / luci-app-wireguard 均为 24.10 默认源不含的包——"
           echo "  tailscale/adguardhome 后端二进制已直接 =y 编入；wireguard UI 由 luci-proto-wireguard 提供，无需其 luci app）"
-          for p in luci-app-passwall luci-app-ddns ddns-scripts-cloudflare luci-theme-argon luci-app-wol luci-app-ttyd openssh-sftp-server luci-proto-wireguard luci-proto-ppp ca-certificates tailscale adguardhome xray-core kmod-mediatek_hnat; do
+          fam_missing=0
+          for p in luci-app-passwall luci-app-ddns ddns-scripts-cloudflare luci-theme-argon luci-app-wol luci-app-ttyd openssh-sftp-server luci-proto-wireguard luci-proto-ppp ca-certificates tailscale adguardhome xray-core kmod-mediatek_hnat cron; do
             if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
               echo "OK   $p"
             else
-              echo "MISS $p  <-- 该包不在 feeds，请加源或删除对应行"
+              echo "MISS $p  <-- make defconfig 后该包被丢弃（feeds 未装或依赖缺失），构建前中断！"
+              fam_missing=1
             fi
           done
+          if [ "$fam_missing" -ne 0 ]; then
+            echo "❌ 全家桶校验未通过，已终止构建。请检查 feeds.conf.default 与目标分支是否含这些包。"
+            exit 1
+          fi
+          echo "✅ 全家桶全部 =y，继续编译"
 
       - name: Download
         run: |

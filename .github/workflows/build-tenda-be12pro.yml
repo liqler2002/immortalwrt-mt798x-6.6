@@ -96,11 +96,11 @@ jobs:
             sleep 8
           done
           ./scripts/feeds install -a || true
-          # 仅做总览统计（feeds 源实际目录数，用来判断拉取是否完整）
-          total_src=$(find feeds -maxdepth 6 -type d -name Makefile 2>/dev/null | wc -l)
-          echo "📊 feeds 源 Makefile 总数: $total_src  (拉全正常应 >4000；<3000 即网络问题)"
-          if [ "$total_src" -lt 3000 ]; then
-            echo "❌ feeds 拉取不完整，重跑通常即可解决。"
+          # 仅做总览统计：feeds install 创建的是软链接 package/feeds/<feed>/<pkg>，需跟 symlink 统计，否则永远 0
+          total_sym=$(ls -d package/feeds/*/* 2>/dev/null | wc -l)
+          echo "📊 feeds 已注册包总数（symbolic link）: $total_sym  (拉全正常应 >3000；<1500 即网络问题)"
+          if [ "$total_sym" -lt 1500 ]; then
+            echo "❌ feeds 拉取明显不全，重跑通常可解决。"
             exit 1
           fi
 
